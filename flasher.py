@@ -16,8 +16,8 @@ DME_COMMAND = 0x06
 #     12 09 06 00 ff ff ff 40 a2                        ....ÿÿÿ@¢        
 
 # Some images have the endianness flipped.
-def correct_byte_order(data_bytes_incomming):
-    data_bytes = bytearray(data_bytes_incomming)
+def correct_byte_order(data_bytes_incoming):
+    data_bytes = bytearray(data_bytes_incoming)
 
     length = len(data_bytes)
     half_length = int(length /2 ) 
