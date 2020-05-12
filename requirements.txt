@@ -1,0 +1,6 @@
+altgraph==0.17
+fire==0.3.1
+progress==1.5
+pyserial==3.4
+six==1.14.0
+termcolor==1.1.0
