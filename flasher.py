@@ -4,17 +4,18 @@ from fire import Fire
 
 ROM_SIZE_KB = 256
 
-CHUNK_SIZE = 0x64
+CHUNK_SIZE = 0x64 # 100 Bytes long.
 
 DME_ID = 0x12
 DME_COMMAND = 0x06
 
-# Get Bytes
+# Example packet structure
+# Get Bytes 0x0 0x64
 #     12 09 06 00 00 00 00 64 79                        .......dy   
-
 # 0Xffffff 0x64
 #     12 09 06 00 ff ff ff 40 a2                        ....ÿÿÿ@¢        
 
+# Some images have the endianness flipped.
 def correct_byte_order(data_bytes_incomming):
     data_bytes = bytearray(data_bytes_incomming)
 
@@ -30,14 +31,17 @@ def correct_byte_order(data_bytes_incomming):
         temp = data_bytes[index]
         data_bytes[index] = data_bytes[next]
         data_bytes[next] = temp
+
     return data_bytes
 
+# Create XOR checksum for data package.
 def calculate_checksum(packet_bytes):
     checksum = 0x0
     for el in packet_bytes:
         checksum ^= el
     return checksum
 
+# Construct message, to send over K-CAN.
 def get_chunk(address, chunk_size):
     address_bytes = address.to_bytes(4, byteorder='big')
 
@@ -49,6 +53,7 @@ def get_chunk(address, chunk_size):
 
     return result
 
+# Construct full message.
 def build_command(ecu, command, data):
     length = len(data) + 4
     data = bytearray([ecu, length, command]) + data
@@ -57,29 +62,33 @@ def build_command(ecu, command, data):
 
     return data
 
+# Send command and process responce
 def read(command, com_port, flipped):
     command_length = len(command)
 
     com_port.write(command)
     com_port.flush()
 
-    get_size_buffer = com_port.read(command_length + 2)
-    get_length_byte = get_size_buffer[-1:]
-    remaining_length = ord(get_length_byte)
-    remaining_length -= 2
+    # Get how long the responce payload is.
+    # Response contains original command, we take the length of that then read the first 2 bytes after that.
+    # Byte 2 contains the length of whole packet.
+    get_size_buffer = com_port.read(command_length + 2) 
+    get_length_byte = get_size_buffer[-1:] # get last byte
+    remaining_length = ord(get_length_byte) # Byte to Int
+    remaining_length -= 2 # We have already read 2 bytes of the payload.
 
-    get_rest_of_buffer = com_port.read(remaining_length)
+    get_rest_of_buffer = com_port.read(remaining_length) 
 
-    valid_data = get_rest_of_buffer[1:-1]
+    valid_data = get_rest_of_buffer[1:-1] # strip command from front, and checksum from end.
 
-    if flipped:
+    if flipped: # If we want the endianness swapped.
         valid_data = correct_byte_order(valid_data)
 
     return valid_data
 
 
+# Main application runner.
 def run(com="COM1", baudrate=9600, filename="ecu.bin", flipped=False):
-
     serial_port = Serial(
         com, 
         baudrate, 
@@ -107,6 +116,7 @@ def run(com="COM1", baudrate=9600, filename="ecu.bin", flipped=False):
     buffer = bytearray()
 
     bar = Bar('Reading', max=chunks)
+    # Get all full sized chunks.
     for chunk in range(chunks):
         address = chunk * CHUNK_SIZE
         command = get_chunk(address, CHUNK_SIZE)
@@ -116,15 +126,18 @@ def run(com="COM1", baudrate=9600, filename="ecu.bin", flipped=False):
 
     bar.finish()
 
+    # Get remainder.
     if remainder != 0:
         address = number_of_bytes - remainder
         command = get_chunk(address, remainder)
         result = read(command, flipped)
         buffer.extend(result)
 
+    # Write to file.
     f = open(filename, 'w+b')
     f.write(buffer)
     f.close()
 
+# Entry point.
 if __name__ == '__main__':
     Fire(run)
